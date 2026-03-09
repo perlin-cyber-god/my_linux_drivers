@@ -1,0 +1,15 @@
+# Linux Kernel Module Build Artifacts
+*.ko
+*.o
+*.mod*
+*.order
+*.symvers
+.*.cmd
+.tmp_versions/
+/built-in.a
+/modules-only.symvers
+/vmlinux
+/System.map
+/vmlinux.o
+/modules.order
+/Module.symvers

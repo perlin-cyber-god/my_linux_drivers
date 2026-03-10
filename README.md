@@ -66,6 +66,28 @@ SPI is a **Synchronous**, **Full-Duplex**, high-speed serial communication inter
 - **Daisy Chaining:** Some SPI devices can be "Daisy Chained," where the MISO of one slave goes into the MOSI of the next, allowing multiple devices to be controlled with a single CS line.
 - **Efficiency:** Since there is no start/stop bit overhead or ACK bit after every byte, SPI is much more efficient for transferring large amounts of data (like to an LCD display or SD Card).
 
+### 4. CAN (Controller Area Network)
+
+CAN is a **Robust**, **Message-based**, multi-master serial bus standard designed for harsh environments (originally for automotive).
+
+**The Architecture (2 Wires):**
+- **CAN_H (CAN High)** & **CAN_L (CAN Low):** These two wires use **Differential Signaling**. Instead of referencing against ground, the receiver looks at the voltage *difference* between them. This makes it incredibly resistant to electrical noise.
+- **Termination:** Requires a **120Ω resistor** at both physical ends of the bus to prevent signal reflections.
+
+**How it Works:**
+- **No Device Addresses:** Nodes don't have addresses. Instead, every **Message** has a unique **Identifier (ID)**. A node just "broadcasts" a message, and other nodes decide if they need that specific ID.
+- **Priority-based Arbitration:** If two nodes start talking at the same time, the one with the **Lower ID Value** wins (highest priority) without losing a single bit of data. This is called "Non-destructive Bitwise Arbitration."
+- **Dominant vs. Recessive Bits:** In CAN, a logic 0 is "Dominant" and logic 1 is "Recessive." This is how the arbitration works—if one node sends a 0 and another sends a 1, the wire physically stays at 0.
+
+**CAN in the Linux Kernel (SocketCAN):**
+- **Networking Model:** Linux treats CAN like a network interface (similar to Ethernet). You don't use `read()` and `write()` on a character device; you use **Berkeley Sockets** (`socket(PF_CAN, SOCK_RAW, CAN_RAW)`).
+- **Interface Names:** Devices appear as `can0`, `can1`, etc.
+- **Tools:** Use `ip link` to set the bitrate and bring the interface up:
+  ```bash
+  sudo ip link set can0 up type can bitrate 500000
+  ```
+- **Utility Commands:** `candump can0` (to listen) and `cansend can0 123#DEADBEEF` (to send).
+
 ## Building the Drivers
 
 ### Prerequisites

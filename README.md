@@ -6,6 +6,7 @@ This repository contains various Linux kernel module drivers.
 
 - `drivers/`: Contains individual kernel modules, each in its own subdirectory.
   - `01-helloworld/`: A basic "Hello World" kernel module.
+  - `02-pseudo-char-driver/`: A pseudo character driver with basic file operations and mutex protection.
 
 ## Building the Drivers
 

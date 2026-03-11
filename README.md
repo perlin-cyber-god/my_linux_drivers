@@ -160,6 +160,12 @@ In modern Linux driver development, we often combine the **Platform** and **Char
     - **The Order of Freeing:** In our driver, we must free the "child" buffers (like `dev_data->buffer`) **before** we free the "parent" structure (`dev_data`). If you free the parent first, you lose the pointer to the child, causing a permanent memory leak.
     - **Safety:** Always ensure that `kfree()` is called exactly once for every successful allocation. Calling it twice (Double Free) or on an invalid pointer will cause a **Kernel Panic**.
 
+5.  **Modern Managed Allocation (`devm_kzalloc`)**:
+    - **What is it?** A "Device Managed" version of `kzalloc`. It ties the memory allocation to the lifecycle of the `struct device`.
+    - **Automatic Cleanup:** When using `devm_kzalloc(&pdev->dev, ...)`, the kernel automatically tracks that memory. If the `probe()` fails later, or when the `remove()` function is called, the kernel **automatically** calls `kfree()` for you.
+    - **Simplification:** This removes the need for complex "waterfall" error handling in `probe` and eliminates manual `kfree()` calls in `remove`.
+    - **The "Hotel Management" Analogy:** It's like a hotel where the staff automatically cleans and resets the room the moment you check out. You don't have to worry about cleaning up after yourself.
+
 ## Building the Drivers
 
 ### Prerequisites

@@ -78,75 +78,55 @@ static int pcd_platform_driver_probe(struct platform_device *pdev)
 
     pr_info("A device is detected! [Name: %s, ID: %d]\n", pdev->name, pdev->id);
 
-    // 1. Extract the platform data
     pdata = (struct pcdev_platform_data*)dev_get_platdata(&pdev->dev);
     if (!pdata) {
         pr_err("No platform data available\n");
         return -EINVAL;
     }
 
-    // 2. Allocate zeroed memory for the device's private data
-    dev_data = kzalloc(sizeof(*dev_data), GFP_KERNEL);
+    // MODERN ALLOCATION 1: Tied to the device lifecycle
+    // The kernel will automatically free this when the device is removed!
+    dev_data = devm_kzalloc(&pdev->dev, sizeof(*dev_data), GFP_KERNEL);
     if (!dev_data) {
         pr_err("Cannot allocate memory for dev_data\n");
         return -ENOMEM;
     }
 
-    // Save dev_data into the platform device's "backpack" for retrieval in remove()
-    dev_set_drvdata(&pdev->dev, dev_data);
-
-    // Copy the hardware specs into our private struct
     dev_data->pdata.size = pdata->size;
     dev_data->pdata.perm = pdata->perm;
     dev_data->pdata.serial_number = pdata->serial_number;
 
-    pr_info("Device Serial: %s, Size: %d, Perm: %d\n", 
-            dev_data->pdata.serial_number, dev_data->pdata.size, dev_data->pdata.perm);
-
-    // 3. Allocate memory for the actual device buffer (The "Fake Hardware")
-    dev_data->buffer = kzalloc(dev_data->pdata.size, GFP_KERNEL);
+    // MODERN ALLOCATION 2: Tied to the device lifecycle
+    dev_data->buffer = devm_kzalloc(&pdev->dev, dev_data->pdata.size, GFP_KERNEL);
     if (!dev_data->buffer) {
         pr_err("Cannot allocate memory for buffer\n");
-        ret = -ENOMEM;
-        goto dev_data_free;
+        return -ENOMEM; // No goto needed! The kernel frees dev_data automatically!
     }
 
-    // 4. Calculate the specific device number (Base + ID)
     dev_data->dev_num = pcdrv_data.device_num_base + pdev->id;
 
-    // 5. Initialize the Character Device and add it to the Kernel
     cdev_init(&dev_data->cdev, &pcd_fops);
     dev_data->cdev.owner = THIS_MODULE;
     
     ret = cdev_add(&dev_data->cdev, dev_data->dev_num, 1);
     if (ret < 0) {
         pr_err("cdev_add failed\n");
-        goto buffer_free;
+        return ret; // Again, no goto needed for memory!
     }
 
-    // 6. Create the actual device file in /dev/
     pcdrv_data.device_pcd = device_create(pcdrv_data.class_pcd, NULL, dev_data->dev_num, NULL, "pcdev-%d", pdev->id);
     if (IS_ERR(pcdrv_data.device_pcd)) {
         pr_err("Device create failed\n");
         ret = PTR_ERR(pcdrv_data.device_pcd);
-        goto cdev_del;
+        cdev_del(&dev_data->cdev); // We still have to manually delete the cdev!
+        return ret;
     }
 
+    dev_set_drvdata(&pdev->dev, dev_data);
     pcdrv_data.total_devices++;
 
     pr_info("Probe was successful!\n\n");
     return 0;
-
-/* ERROR HANDLING (The "Waterfall" cleanup) */
-cdev_del:
-    cdev_del(&dev_data->cdev);
-buffer_free:
-    /* CRITICAL: Free the buffer before the parent structure */
-    kfree(dev_data->buffer);
-dev_data_free:
-    /* CRITICAL: Free the parent structure itself */
-    kfree(dev_data);
-    return ret;
 }
 
 // Remove: Gets called when the device is unplugged or module is removed
@@ -156,34 +136,22 @@ static int pcd_platform_driver_remove(struct platform_device *pdev)
 
     pr_info("A device is removed! [Name: %s, ID: %d]\n", pdev->name, pdev->id);
 
-    // 1. Unzip the backpack: Get our private data folder back!
     dev_data = dev_get_drvdata(&pdev->dev);
-    
-    if (!dev_data) {
-        pr_err("Error: No private data found in the device's backpack!\n");
-        return -EINVAL;
-    }
+    if (!dev_data) return -EINVAL;
 
-    // 2. Destroy the device file in /dev/
+    // 1. Destroy the device file
     device_destroy(pcdrv_data.class_pcd, dev_data->dev_num);
 
-    // 3. Remove the Character Device from the kernel
+    // 2. Remove the Character Device
     cdev_del(&dev_data->cdev);
 
-    /* 4. MEMORY DEALLOCATION SEQUENCE:
-     * We must free the internal "child" buffers FIRST. 
-     * If we freed dev_data first, we would lose the pointer to dev_data->buffer, 
-     * resulting in a permanent memory leak in the kernel.
-     */
-    kfree(dev_data->buffer);
+    // NO kfree() NEEDED! 
+    // Because we used devm_kzalloc, the kernel automatically frees the memory 
+    // as soon as the remove function returns. It's like a hotel staff cleaning 
+    // the room the moment you check out.
 
-    /* 5. Finally, free the main "parent" structure itself. */
-    kfree(dev_data);
-
-    // 6. Update our global driver statistics
     pcdrv_data.total_devices--;
-
-    pr_info("Device completely removed and memory freed. Total devices left: %d\n\n", pcdrv_data.total_devices);
+    pr_info("Device completely removed. Total devices left: %d\n\n", pcdrv_data.total_devices);
 
     return 0;
 }
@@ -236,4 +204,4 @@ module_init(pcd_driver_init);
 module_exit(pcd_driver_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Platform + Character Driver with Full Probe/Remove Logic");
+MODULE_DESCRIPTION("Platform + Character Driver with Modern devm_kzalloc Management");

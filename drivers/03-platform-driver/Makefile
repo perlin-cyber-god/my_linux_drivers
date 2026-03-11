@@ -1,4 +1,4 @@
-obj-m := pcd_platform_driver.o
+obj-m := pcd_platform_driver.o pcd_device_setup.o
 ARCH=arm64
 CROSS_COMPILE=aarch64-linux-gnu-
 # For RPi 5, we'll need the correct kernel source path. Defaulting to local modules for now.

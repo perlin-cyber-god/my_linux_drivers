@@ -140,6 +140,21 @@ In modern Linux driver development, we often combine the **Platform** and **Char
     - **Init Function:** Preps the OS. It reserves device numbers (Major/Minor) and creates a `/sys/class` folder. It essentially says, "I know how to control `pseudo-char-device` hardware; let me know if you find any."
     - **Exit Function:** Uninstalls the software driver and returns resources to the OS.
 
+**Kernel Memory Management & The "Backpack" Concept:**
+
+1.  **`kzalloc()` vs `kmalloc()`**:
+    - `kmalloc()` allocates memory but leaves "garbage" data inside.
+    - `kzalloc()` (used in our `probe`) allocates memory and **zeros it out** automatically. This prevents bugs where uninitialized pointers cause kernel panics.
+    - **GFP_KERNEL**: This flag tells the kernel that the allocation can sleep if memory is tight (fine for `probe`, but never use in an interrupt handler!).
+
+2.  **The "Driver Data" Backpack**:
+    - When `probe()` runs, we allocate a `struct pcdev_private_data` for that specific device.
+    - We use **`dev_set_drvdata(&pdev->dev, dev_data)`** to "stuff" this pointer into the device's internal structure (the backpack).
+    - When `remove()` runs later, we use **`dev_get_drvdata(&pdev->dev)`** to "unzip" the backpack and get our data back so we can free it.
+
+3.  **Error Handling (The Waterfall)**:
+    - If `probe()` fails halfway (e.g., `kzalloc` works but `cdev_add` fails), we must use `goto` labels to "unwind" and free only what was already allocated. This prevents **Memory Leaks** in the kernel.
+
 ## Building the Drivers
 
 ### Prerequisites

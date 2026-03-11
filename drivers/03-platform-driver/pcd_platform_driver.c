@@ -13,29 +13,24 @@
 
 /*
  * DEVICE PRIVATE DATA
- * Think of this as the "File Folder" for a single piece of hardware.
- * If you plug in 3 devices, the probe() function will allocate 3 of these.
  */
 struct pcdev_private_data {
-    struct pcdev_platform_data pdata; // From platform.h (Size, Perms, Serial)
-    char *buffer;                     // The actual memory buffer (fake hardware)
-    dev_t dev_num;                    // The specific Minor Number for this device
-    struct cdev cdev;                 // The Character Device object
+    struct pcdev_platform_data pdata;
+    char *buffer;
+    dev_t dev_num;
+    struct cdev cdev;
 };
 
 /*
  * DRIVER PRIVATE DATA
- * Think of this as the "Filing Cabinet". There is only ONE of these.
- * It holds the global state for the entire driver.
  */
 struct pcdrv_private_data {
-    int total_devices;                // How many devices have we probed?
-    dev_t device_num_base;            // The starting Major/Minor number
-    struct class *class_pcd;          // The /sys/class/pcd_class folder
-    struct device *device_pcd;        // (Used later for device creation)
+    int total_devices;
+    dev_t device_num_base;
+    struct class *class_pcd;
+    struct device *device_pcd;
 };
 
-// The single, global instance of the filing cabinet
 struct pcdrv_private_data pcdrv_data;
 
 /* ====================================================
@@ -74,15 +69,115 @@ struct file_operations pcd_fops = {
  * 2. THE PLATFORM DRIVER HALF (Hardware Matchmaker)
  * ==================================================== */
 
+// Probe: Gets called the millisecond the Kernel finds a matching device name
 static int pcd_platform_driver_probe(struct platform_device *pdev)
 {
+    int ret;
+    struct pcdev_private_data *dev_data;
+    struct pcdev_platform_data *pdata;
+
     pr_info("A device is detected! [Name: %s, ID: %d]\n", pdev->name, pdev->id);
+
+    // 1. Extract the platform data
+    pdata = (struct pcdev_platform_data*)dev_get_platdata(&pdev->dev);
+    if (!pdata) {
+        pr_err("No platform data available\n");
+        return -EINVAL;
+    }
+
+    // 2. Allocate zeroed memory for the device's private data
+    dev_data = kzalloc(sizeof(*dev_data), GFP_KERNEL);
+    if (!dev_data) {
+        pr_err("Cannot allocate memory for dev_data\n");
+        return -ENOMEM;
+    }
+
+    // Save dev_data into the platform device's "backpack" for retrieval in remove()
+    dev_set_drvdata(&pdev->dev, dev_data);
+
+    // Copy the hardware specs into our private struct
+    dev_data->pdata.size = pdata->size;
+    dev_data->pdata.perm = pdata->perm;
+    dev_data->pdata.serial_number = pdata->serial_number;
+
+    pr_info("Device Serial: %s, Size: %d, Perm: %d\n", 
+            dev_data->pdata.serial_number, dev_data->pdata.size, dev_data->pdata.perm);
+
+    // 3. Allocate memory for the actual device buffer (The "Fake Hardware")
+    dev_data->buffer = kzalloc(dev_data->pdata.size, GFP_KERNEL);
+    if (!dev_data->buffer) {
+        pr_err("Cannot allocate memory for buffer\n");
+        ret = -ENOMEM;
+        goto dev_data_free;
+    }
+
+    // 4. Calculate the specific device number (Base + ID)
+    dev_data->dev_num = pcdrv_data.device_num_base + pdev->id;
+
+    // 5. Initialize the Character Device and add it to the Kernel
+    cdev_init(&dev_data->cdev, &pcd_fops);
+    dev_data->cdev.owner = THIS_MODULE;
+    
+    ret = cdev_add(&dev_data->cdev, dev_data->dev_num, 1);
+    if (ret < 0) {
+        pr_err("cdev_add failed\n");
+        goto buffer_free;
+    }
+
+    // 6. Create the actual device file in /dev/
+    pcdrv_data.device_pcd = device_create(pcdrv_data.class_pcd, NULL, dev_data->dev_num, NULL, "pcdev-%d", pdev->id);
+    if (IS_ERR(pcdrv_data.device_pcd)) {
+        pr_err("Device create failed\n");
+        ret = PTR_ERR(pcdrv_data.device_pcd);
+        goto cdev_del;
+    }
+
+    pcdrv_data.total_devices++;
+
+    pr_info("Probe was successful!\n\n");
     return 0;
+
+cdev_del:
+    cdev_del(&dev_data->cdev);
+buffer_free:
+    kfree(dev_data->buffer);
+dev_data_free:
+    kfree(dev_data);
+    return ret;
 }
 
+// Remove: Gets called when the device is unplugged or module is removed
 static int pcd_platform_driver_remove(struct platform_device *pdev)
 {
+    struct pcdev_private_data *dev_data;
+
     pr_info("A device is removed! [Name: %s, ID: %d]\n", pdev->name, pdev->id);
+
+    // 1. Unzip the backpack: Get our private data folder back!
+    dev_data = dev_get_drvdata(&pdev->dev);
+    
+    if (!dev_data) {
+        pr_err("Error: No private data found in the device's backpack!\n");
+        return -EINVAL;
+    }
+
+    // 2. Destroy the device file in /dev/
+    device_destroy(pcdrv_data.class_pcd, dev_data->dev_num);
+
+    // 3. Remove the Character Device from the kernel
+    cdev_del(&dev_data->cdev);
+
+    // 4. Free the memory we allocated for the fake hardware buffer
+    kfree(dev_data->buffer);
+
+    // 5. Free the memory we allocated for the private data structure itself
+    kfree(dev_data);
+
+    // 6. Update our global driver statistics
+    pcdrv_data.total_devices--;
+
+    pr_info("Device completely removed and memory freed. Total devices left: %d\n\n", pcdrv_data.total_devices);
+
     return 0;
 }
 
@@ -102,14 +197,12 @@ static int __init pcd_driver_init(void)
 {
     int ret;
 
-    // 1. Dynamically allocate a device number range for MAX_DEVICES
     ret = alloc_chrdev_region(&pcdrv_data.device_num_base, 0, MAX_DEVICES, "pcdev");
     if (ret < 0) {
         pr_err("Alloc chrdev failed\n");
         return ret;
     }
 
-    // 2. Create device class under /sys/class
     pcdrv_data.class_pcd = class_create(THIS_MODULE, "pcd_class");
     if (IS_ERR(pcdrv_data.class_pcd)) {
         pr_err("Class creation failed\n");
@@ -118,7 +211,6 @@ static int __init pcd_driver_init(void)
         return ret;
     }
 
-    // 3. Register the platform driver
     platform_driver_register(&pcd_platform_driver);
     
     pr_info("pcd platform driver loaded\n");
@@ -127,15 +219,9 @@ static int __init pcd_driver_init(void)
 
 static void __exit pcd_driver_exit(void)
 {
-    // 1. Unregister the platform driver
     platform_driver_unregister(&pcd_platform_driver);
-
-    // 2. Destroy the class
     class_destroy(pcdrv_data.class_pcd);
-
-    // 3. Unregister device number region
     unregister_chrdev_region(pcdrv_data.device_num_base, MAX_DEVICES);
-
     pr_info("pcd platform driver unloaded\n");
 }
 
@@ -143,4 +229,4 @@ module_init(pcd_driver_init);
 module_exit(pcd_driver_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Platform + Character Driver with Private Data Structures");
+MODULE_DESCRIPTION("Platform + Character Driver with Full Probe/Remove Logic");

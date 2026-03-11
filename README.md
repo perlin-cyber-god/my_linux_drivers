@@ -121,6 +121,12 @@ A **Platform Driver** is used for devices that are not self-discoverable (unlike
 - It allows your driver to be "hot-pluggable" in a software sense via **Device Tree Overlays (`.dtbo`)**.
 - You can change the hardware configuration (like which pins a driver uses) without recompiling the driver—just update the Overlay.
 
+**Platform + Character Driver Integration:**
+In modern Linux driver development, we often combine the **Platform** and **Character** driver models.
+- The **Platform** side handles the hardware detection (matching via `compatible` or `name`).
+- The **Character** side (`file_operations`) provides the interface for user-space applications to communicate with that hardware via `/dev/` files.
+- **Key Flow:** `Module Load` -> `Platform Driver Register` -> `Hardware Match` -> `Probe()` -> `Char Device Register` (cdev).
+
 ## Building the Drivers
 
 ### Prerequisites

@@ -1,68 +1,95 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/fs.h>
 #include "platform.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) "%s : " fmt,__func__
 
-// 1. The Probe Function: Called automatically when the Kernel finds a name match!
-static int pcd_probe(struct platform_device *pdev)
-{
-    struct pcdev_platform_data *pdata;
+/* ====================================================
+ * 1. THE CHARACTER DEVICE HALF (User Space Interface)
+ * ==================================================== */
 
-    pr_info("A device is detected! [Name: %s, ID: %d]\n", pdev->name, pdev->id);
-
-    // Extract the platform data pointer from the device structure
-    pdata = (struct pcdev_platform_data*) dev_get_platdata(&pdev->dev);
-    
-    if (!pdata) {
-        pr_info("No platform data available\n");
-        return -EINVAL;
-    }
-
-    // Print out the hardware specs to prove we got them
-    pr_info("Device Serial Number: %s\n", pdata->serial_number);
-    pr_info("Device Size: %d bytes\n", pdata->size);
-    pr_info("Device Permission: %d\n", pdata->perm);
-    pr_info("Probe successful!\n\n");
-
+// Dummy open
+int pcd_open(struct inode *inode, struct file *filp) {
+    pr_info("Device opened\n");
     return 0;
 }
 
-// 2. The Remove Function: Called when the device or driver is removed
-static int pcd_remove(struct platform_device *pdev)
+// Dummy read
+ssize_t pcd_read(struct file *filp, char __user *buff, size_t count, loff_t *f_pos) {
+    pr_info("Read requested\n");
+    return 0;
+}
+
+// Dummy write (Returns ENOMEM like the instructor asked)
+ssize_t pcd_write(struct file *filp, const char __user *buff, size_t count, loff_t *f_pos) {
+    pr_info("Write requested\n");
+    return -ENOMEM; 
+}
+
+// Dummy release
+int pcd_release(struct inode *inode, struct file *filp) {
+    pr_info("Device closed\n");
+    return 0;
+}
+
+// The File Operations Map
+struct file_operations pcd_fops = {
+    .open = pcd_open,
+    .write = pcd_write,
+    .read = pcd_read,
+    .release = pcd_release,
+    .owner = THIS_MODULE
+};
+
+/* ====================================================
+ * 2. THE PLATFORM DRIVER HALF (Hardware Matchmaker)
+ * ==================================================== */
+
+// Probe: Gets called the millisecond the Kernel finds a matching device name
+static int pcd_platform_driver_probe(struct platform_device *pdev)
+{
+    pr_info("A device is detected! [Name: %s, ID: %d]\n", pdev->name, pdev->id);
+    // (In the next lecture, the instructor will dynamically create the /dev/ files here!)
+    return 0;
+}
+
+// Remove: Gets called when the device is unplugged or module is removed
+static int pcd_platform_driver_remove(struct platform_device *pdev)
 {
     pr_info("A device is removed! [Name: %s, ID: %d]\n", pdev->name, pdev->id);
     return 0;
 }
 
-// 3. The Platform Driver Structure
+// The Platform Driver Structure (The literal glue)
 struct platform_driver pcd_platform_driver = {
-    .probe = pcd_probe,
-    .remove = pcd_remove,
+    .probe = pcd_platform_driver_probe,
+    .remove = pcd_platform_driver_remove,
     .driver = {
-        // THIS IS THE CRITICAL MATCHING STRING
-        .name = "pseudo-char-device"
+        .name = "pseudo-char-device" // MUST MATCH THE SETUP MODULE EXACTLY
     }
 };
 
-// 4. Module Init: Register the driver with the Platform Bus
+/* ====================================================
+ * 3. MODULE INIT / EXIT
+ * ==================================================== */
+
 static int __init pcd_driver_init(void)
 {
     platform_driver_register(&pcd_platform_driver);
-    pr_info("Platform Driver loaded.\n");
+    pr_info("Platform Driver Loaded\n");
     return 0;
 }
 
-// 5. Module Exit: Unregister the driver
 static void __exit pcd_driver_exit(void)
 {
     platform_driver_unregister(&pcd_platform_driver);
-    pr_info("Platform Driver unloaded.\n");
+    pr_info("Platform Driver Unloaded\n");
 }
 
 module_init(pcd_driver_init);
 module_exit(pcd_driver_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("A pseudo character platform driver");
+MODULE_DESCRIPTION("Platform + Character Driver Merger");

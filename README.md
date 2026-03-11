@@ -127,6 +127,19 @@ In modern Linux driver development, we often combine the **Platform** and **Char
 - The **Character** side (`file_operations`) provides the interface for user-space applications to communicate with that hardware via `/dev/` files.
 - **Key Flow:** `Module Load` -> `Platform Driver Register` -> `Hardware Match` -> `Probe()` -> `Char Device Register` (cdev).
 
+**The Two-Module Architecture:**
+
+1.  **Module 1: The Hardware Injector (`pcd_device_setup.c`)**
+    - Think of this module as your hands physically plugging hardware into a system.
+    - **Init Function:** Tells the kernel, "I just plugged in two physical pieces of hardware. Here are their specs (Platform Data) and their name (`pseudo-char-device`)."
+    - **Exit Function:** Simulates physically unplugging the hardware.
+    - *Note:* In real RPi 5 development, this part is usually handled by the **Device Tree** at boot, rather than a manual module.
+
+2.  **Module 2: The Software Driver (`pcd_platform_driver.c`)**
+    - This is the actual software driver that controls the hardware.
+    - **Init Function:** Preps the OS. It reserves device numbers (Major/Minor) and creates a `/sys/class` folder. It essentially says, "I know how to control `pseudo-char-device` hardware; let me know if you find any."
+    - **Exit Function:** Uninstalls the software driver and returns resources to the OS.
+
 ## Building the Drivers
 
 ### Prerequisites

@@ -1,14 +1,11 @@
-obj-m := pcd_platform_driver.o pcd_device_setup.o
-ARCH=arm64
-CROSS_COMPILE=aarch64-linux-gnu-
-# For RPi 5, we'll need the correct kernel source path. Defaulting to local modules for now.
-KERN_DIR = /lib/modules/$(shell uname -r)/build/
+obj-m := pcd_device_setup.o pcd_platform_driver.o
+
+# Find the build path for the currently running kernel on your Pi
+KDIR := /lib/modules/$(shell uname -r)/build
+PWD := $(shell pwd)
 
 all:
-	make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KERN_DIR) M=$(PWD) modules
+	make -C $(KDIR) M=$(PWD) modules
+
 clean:
-	make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KERN_DIR) M=$(PWD) clean
-help:
-	make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KERN_DIR) M=$(PWD) help
-host:
-	make -C $(KERN_DIR) M=$(PWD) modules
+	make -C $(KDIR) M=$(PWD) clean

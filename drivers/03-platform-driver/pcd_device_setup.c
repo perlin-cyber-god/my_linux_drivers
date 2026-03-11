@@ -11,12 +11,19 @@ struct pcdev_platform_data pcdev_pdata[2] = {
     [1] = {.size = 1024, .perm = RDWR, .serial_number = "PCDEVXYZ2222"}
 };
 
+// The dummy release function required by the kernel
+static void pcdev_release(struct device *dev)
+{
+    pr_info("Device released! Memory can be freed here.\n");
+}
+
 // 2. Define Platform Device 1
 struct platform_device platform_pcdev_1 = {
     .name = "pseudo-char-device",
     .id = 0,
     .dev = {
-        .platform_data = &pcdev_pdata[0]
+        .platform_data = &pcdev_pdata[0],
+        .release = pcdev_release
     }
 };
 
@@ -25,7 +32,8 @@ struct platform_device platform_pcdev_2 = {
     .name = "pseudo-char-device",
     .id = 1,
     .dev = {
-        .platform_data = &pcdev_pdata[1]
+        .platform_data = &pcdev_pdata[1],
+        .release = pcdev_release
     }
 };
 

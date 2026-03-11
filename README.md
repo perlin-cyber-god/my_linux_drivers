@@ -88,6 +88,38 @@ CAN is a **Robust**, **Message-based**, multi-master serial bus standard designe
   ```
 - **Utility Commands:** `candump can0` (to listen) and `cansend can0 123#DEADBEEF` (to send).
 
+### 5. Platform Drivers (Raspberry Pi 5 / BCM2712)
+
+A **Platform Driver** is used for devices that are not self-discoverable (unlike USB or PCI). These are usually integrated directly into the System-on-Chip (SoC), like the **BCM2712** on the Raspberry Pi 5.
+
+**The Concept:**
+- Since the kernel doesn't know which pins or memory addresses a built-in UART or GPIO controller uses, we must provide this information via a **Device Tree (DT)**.
+- The **Platform Bus** is a virtual bus that matches a `platform_driver` with a `platform_device` based on a **"compatible"** string.
+
+**Context: BCM2712 (Raspberry Pi 5):**
+- The BCM2712 is a powerful SoC with ARM Cortex-A76 cores.
+- Most peripherals (I2C, SPI, UART) are memory-mapped.
+- **Device Tree:** The RPi 5 uses `.dtb` files to describe its hardware. For example, the `compatible` string for a UART might look like `"brcm,bcm2711-uart"` (or specific to bcm2712).
+
+**Key Components of a Platform Driver:**
+1.  **`struct platform_driver`**: This structure contains pointers to your `probe` and `remove` functions.
+2.  **`probe()` Function**: Called when the kernel finds a device in the Device Tree that matches your driver's compatible string. This is where you:
+    - Map I/O memory (`ioremap`).
+    - Request IRQs.
+    - Initialize the hardware.
+3.  **`remove()` Function**: Called when the driver is unloaded or the device is removed. You must undo everything done in `probe()`.
+4.  **`compatible` String**: The "glue" that connects the hardware description in the DT to your code.
+    ```c
+    static const struct of_device_id my_rpi_match[] = {
+        { .compatible = "my-custom-device,rpi5" },
+        {},
+    };
+    ```
+
+**Why use Platform Drivers on RPi 5?**
+- It allows your driver to be "hot-pluggable" in a software sense via **Device Tree Overlays (`.dtbo`)**.
+- You can change the hardware configuration (like which pins a driver uses) without recompiling the driver—just update the Overlay.
+
 ## Building the Drivers
 
 ### Prerequisites

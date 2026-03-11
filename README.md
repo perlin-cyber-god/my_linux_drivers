@@ -166,6 +166,12 @@ In modern Linux driver development, we often combine the **Platform** and **Char
     - **Simplification:** This removes the need for complex "waterfall" error handling in `probe` and eliminates manual `kfree()` calls in `remove`.
     - **The "Hotel Management" Analogy:** It's like a hotel where the staff automatically cleans and resets the room the moment you check out. You don't have to worry about cleaning up after yourself.
 
+6.  **Registering Multiple Devices (`platform_add_devices`)**:
+    - **The Danger of Overwriting:** If you manually call `platform_device_register()` for multiple devices with the same ID or improper configuration, you risk a **Kernel Crash** or overwriting existing device data.
+    - **The Better Way:** Use **`platform_add_devices()`**. This function takes an array of pointers to `struct platform_device` and registers them all in one shot.
+    - **Unique IDs:** Each device must have a unique `.id` (e.g., 0, 1, 2, 3). This allows the kernel to create unique entries like `/dev/pcdev-0` and `/dev/pcdev-1` without conflict.
+    - **Clean Cleanup:** When removing the module, use a simple loop to call `platform_device_unregister()` for each device in the array to ensure no "zombie" devices are left in the kernel's memory.
+
 ## Building the Drivers
 
 ### Prerequisites

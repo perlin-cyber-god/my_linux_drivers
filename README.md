@@ -172,6 +172,16 @@ In modern Linux driver development, we often combine the **Platform** and **Char
     - **Unique IDs:** Each device must have a unique `.id` (e.g., 0, 1, 2, 3). This allows the kernel to create unique entries like `/dev/pcdev-0` and `/dev/pcdev-1` without conflict.
     - **Clean Cleanup:** When removing the module, use a simple loop to call `platform_device_unregister()` for each device in the array to ensure no "zombie" devices are left in the kernel's memory.
 
+7.  **Advanced Platform Driver Concepts**:
+    - **The `id_table` (Universal Translator):** Instead of matching a single name, you can provide an `id_table` with multiple device names (e.g., `jarvis-cpu-fan`, `jarvis-gpu-fan`). The kernel will send all of them to your driver.
+    - **The `driver_data` Trick:** Inside the `id_table`, you can assign a unique number to each name. Your `probe` function receives this number and can use it as an index to pull specific hardware configurations (like PWM frequencies) from an array.
+    - **Why avoid `module_platform_driver`?** This macro replaces `module_init` and `module_exit`. While clean, we can't use it for our character drivers because we need to manually manage `alloc_chrdev_region` to create our `/dev/` files.
+
+8.  **The Big Pivot: Device Trees (DT)**:
+    - **Transition to Reality:** On a real Raspberry Pi 5, we don't use `pcd_device_setup.c` to "inject" fake hardware.
+    - **DTS Files:** Instead, we write a **Device Tree Source (.dts)** file. This text file describes the physical hardware (pins, addresses, interrupts) on the BCM2712 chip.
+    - **Matching via `compatible`:** The kernel matches your driver to the RPi 5 hardware using the `compatible` string defined in the Device Tree, rather than just a name string.
+
 ## Building the Drivers
 
 ### Prerequisites

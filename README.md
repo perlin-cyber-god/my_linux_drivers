@@ -155,6 +155,11 @@ In modern Linux driver development, we often combine the **Platform** and **Char
 3.  **Error Handling (The Waterfall)**:
     - If `probe()` fails halfway (e.g., `kzalloc` works but `cdev_add` fails), we must use `goto` labels to "unwind" and free only what was already allocated. This prevents **Memory Leaks** in the kernel.
 
+4.  **Memory Deallocation with `kfree()`**:
+    - **No Garbage Collection:** Unlike Python or Java, the Linux Kernel has no garbage collector. If you `kzalloc()` something and forget to `kfree()` it, that memory is lost until the system reboots.
+    - **The Order of Freeing:** In our driver, we must free the "child" buffers (like `dev_data->buffer`) **before** we free the "parent" structure (`dev_data`). If you free the parent first, you lose the pointer to the child, causing a permanent memory leak.
+    - **Safety:** Always ensure that `kfree()` is called exactly once for every successful allocation. Calling it twice (Double Free) or on an invalid pointer will cause a **Kernel Panic**.
+
 ## Building the Drivers
 
 ### Prerequisites

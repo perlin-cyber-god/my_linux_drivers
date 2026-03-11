@@ -137,11 +137,14 @@ static int pcd_platform_driver_probe(struct platform_device *pdev)
     pr_info("Probe was successful!\n\n");
     return 0;
 
+/* ERROR HANDLING (The "Waterfall" cleanup) */
 cdev_del:
     cdev_del(&dev_data->cdev);
 buffer_free:
+    /* CRITICAL: Free the buffer before the parent structure */
     kfree(dev_data->buffer);
 dev_data_free:
+    /* CRITICAL: Free the parent structure itself */
     kfree(dev_data);
     return ret;
 }
@@ -167,10 +170,14 @@ static int pcd_platform_driver_remove(struct platform_device *pdev)
     // 3. Remove the Character Device from the kernel
     cdev_del(&dev_data->cdev);
 
-    // 4. Free the memory we allocated for the fake hardware buffer
+    /* 4. MEMORY DEALLOCATION SEQUENCE:
+     * We must free the internal "child" buffers FIRST. 
+     * If we freed dev_data first, we would lose the pointer to dev_data->buffer, 
+     * resulting in a permanent memory leak in the kernel.
+     */
     kfree(dev_data->buffer);
 
-    // 5. Free the memory we allocated for the private data structure itself
+    /* 5. Finally, free the main "parent" structure itself. */
     kfree(dev_data);
 
     // 6. Update our global driver statistics

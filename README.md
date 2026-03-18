@@ -295,7 +295,60 @@ my_device@12345678 {              // Node Name @ Unit Address
 
 ---
 
-## 3. Parent-Child Relationships (The I2C Example)
+## 3. The Golden Rule of Node Naming
+
+Every piece of hardware in your system is a "Node." The strict formula for naming a node is:
+
+`node-name@unit-address`
+
+### Breakdown of the Three Critical Parts:
+
+#### 1. The `node-name` (The "What")
+This should be a generic description of the device class. You shouldn't name a node `my_awesome_beetle_motor`; you should name it something standard like `pwm`, `serial`, `i2c`, or `led`.
+
+#### 2. The `unit-address` (The "Where")
+If you have five I2C controllers on your SoC, how does the kernel tell them apart? It uses the memory address where that specific controller lives on the physical silicon chip.
+*   **Crucial Rule:** The `unit-address` **must** match the first number listed in the `reg` property inside the node.
+
+#### 3. The `reg` Property (The Register Map)
+The `reg` property tells the CPU exactly where to look in physical memory to talk to this hardware. It usually looks like this: `reg = <0x40000000 0x1000>;`
+*   The **first number** (`0x40000000`) is the **Base Address** (where the hardware starts).
+*   The **second number** (`0x1000`) is the **Length/Size** (how much memory it takes up).
+
+### Example: Putting it together
+```dts
+i2c@40000000 {                      // node-name is "i2c", unit-address is "40000000"
+    reg = <0x40000000 0x1000>;      // The base address matches the unit-address!
+    status = "okay";
+};
+```
+
+### The Exception: No `reg` Property
+What if you are defining a software concept, or a device that doesn't have a specific memory address (like a generic GPIO button)? If there is no `reg` property, you **must** omit the `@unit-address`.
+
+```dts
+gpio_keys {                         // Notice there is no @ symbol here
+    compatible = "gpio-keys";
+    
+    power_button {                  // Child node with no memory address
+        label = "Power";
+        gpios = <&gpio 14 0>;       // Using GPIO pin 14
+    };
+};
+```
+
+### Labels (The Alias)
+Typing out `/soc/i2c@40000000` every time you want to refer to that bus is exhausting. To fix this, we use **Labels**. A label is created by adding text and a colon `:` before the node name.
+
+```dts
+i2c0: i2c@40000000 {                // "i2c0" is now the Label!
+    reg = <0x40000000 0x1000>;
+};
+```
+
+---
+
+## 4. Parent-Child Relationships (The I2C Example)
 The power of the DT is its hierarchy. Let's look at a realistic scenario: An I2C Controller (the parent) with two sensors (the children) attached to it.
 
 ```dts

@@ -321,15 +321,34 @@ The power of the DT is its hierarchy. Let's look at a realistic scenario: An I2C
 
 ---
 
-## 4. Modularity: DTSI vs DTS
+### 4. Modularity: DTSI vs DTS
 In real-world projects like the BeagleBone Black or Raspberry Pi, we don't write everything in one file. We use a modular approach.
 
-### The `.dtsi` (Inclusion File) - "The Blueprint"
+#### The `.dtsi` (Inclusion File) - "The Blueprint"
 The SoC vendor (Broadcom, TI, etc.) provides a `.dtsi` file. It contains the "Global" hardware that never changes (like the CPU cores or the physical addresses of UARTs). 
 *   **Rule:** **NEVER edit the `.dtsi` file!** It is shared by many different boards.
 
-### The `.dts` (Source File) - "The Specific Build"
+#### The `.dts` (Source File) - "The Specific Build"
 This is *your* file. You include the `.dtsi` and then **override** the parts you need for your specific board.
+
+#### The Solution: Overriding (The "&" Symbol)
+Instead of editing the base file, you use your specific board file (or an overlay) to reference the original node and overwrite just the properties you want to change. You do this using an **ampersand (&)**.
+
+**In the base `.dtsi` file, Broadcom writes:**
+```dts
+i2c1: i2c@400000 {          // "i2c1" is the label (the nickname)
+    status = "disabled";    // Disabled by default to save power
+};
+```
+
+**In your custom board file (or overlay), you write:**
+```dts
+&i2c1 {                     // "Hey Kernel, go find the node nicknamed i2c1..."
+    status = "okay";        // "...and change its status to okay!"
+};
+```
+
+This is how Linux achieves perfect modularity. The base files remain untouched and pristine, while your specific files "patch in" the exact hardware you need at compile time.
 
 #### Example: Overriding for your board
 Imagine the SoC blueprint (`soc.dtsi`) has a GPU, but it's disabled by default to save power.
@@ -342,6 +361,7 @@ Imagine the SoC blueprint (`soc.dtsi`) has a GPU, but it's disabled by default t
     status = "okay";  /* We just 'turned on' the GPU for our board! */
 };
 ```
+
 
 ---
 

@@ -590,7 +590,51 @@ While the DT specification is flexible, the Linux community follows specific sty
 
 ---
 
-## 11. Key Takeaways
+## 11. Backward Compatibility: The Kernel's Promise
+
+One of the most critical rules in Linux kernel development is: **"Never break the Device Tree ABI."** This means that a Device Tree binary (DTB) created today should ideally work with a Linux kernel released 5 years from now.
+
+### The Problem: Hardware Evolves, Kernels Change
+Imagine you manufactured 10,000 industrial controllers in 2024. They all have a specific temperature sensor (v1) and a DTB flashed into their ROM. In 2026, you want to update the Linux kernel to get security patches, but you cannot physically change the DTB in those 10,000 devices.
+
+### How Developers Solve This (The "v2" Example)
+
+Suppose a vendor releases a new version of a chip: **"SuperSensor v2"**. It is 100% compatible with **"SuperSensor v1"** but adds a new "High-Precision Mode."
+
+#### 1. The Developer's Strategy
+In the new Device Tree (for the new hardware), the developer writes:
+```dts
+/* New DT for v2 hardware */
+compatible = "vendor,supersensor-v2", "vendor,supersensor-v1";
+```
+
+In the **New Kernel Driver**, the developer writes:
+```c
+static const struct of_device_id supersensor_match[] = {
+    { .compatible = "vendor,supersensor-v2", .data = &v2_config },
+    { .compatible = "vendor,supersensor-v1", .data = &v1_config },
+    { }
+};
+```
+
+#### 2. Scenario A: Old Hardware (DT v1) + New Kernel
+*   **The Match:** The kernel sees `compatible = "vendor,supersensor-v1"`.
+*   **The Result:** It finds the match in its table and loads the driver using `v1_config`. The hardware works perfectly even though the kernel is "smarter" than the hardware.
+
+#### 3. Scenario B: New Hardware (DT v2) + Old Kernel
+*   **The Match:** The old kernel (from 2024) doesn't know about `supersensor-v2`. It skips it.
+*   **The Fallback:** It sees `supersensor-v1`, which it *does* know.
+*   **The Result:** It loads the driver using `v1_config`. You don't get the "High-Precision" features, but the sensor **still works** for basic tasks. This is backward compatibility in action!
+
+### The "Golden Rule" for Developers
+To ensure older versions adapt to newer updates, kernel developers follow these rules:
+1.  **Never remove old compatible strings:** Even if a driver is rewritten, it must still recognize the old strings from 10 years ago.
+2.  **Add, Don't Modify:** If you need a new property, add an optional one (e.g., `high-precision-enable;`). If the property is missing (as it would be in an old DTB), the driver assumes a safe default.
+3.  **Hardware Description Only:** The DT should describe the *physical* hardware, not the *software* features. Software features change, but the hardware pins and addresses are forever.
+
+---
+
+## 12. Key Takeaways
 
 1.  **Nodes** represent devices; **Properties** (like `compatible`, `reg`, `status`) describe them.
 2.  **The Specification** (Chapter 3) is the "Bible" that tells you which properties are allowed.

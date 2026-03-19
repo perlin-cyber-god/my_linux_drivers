@@ -786,7 +786,63 @@ In our platform driver code, we used `device_create()`. Under the hood, this one
 
 ---
 
-## 15. Key Takeaways
+## 15. Creating `sysfs` Files: Attributes and Permissions
+
+In the Linux Device Model, every file you see inside a `/sys/` folder is called an **Attribute**. If you want a user to be able to read or write a setting (like the `max_size` of a buffer), you must create an attribute for it.
+
+### 1. The Problem: The Bare `struct attribute`
+At the absolute lowest level, the kernel uses this structure:
+```c
+struct attribute {
+    const char *name; /* The name of the file */
+    umode_t mode;     /* File permissions (e.g., Read Only) */
+};
+```
+**The Flaw:** Notice what's missing? There are **no function pointers**. If a user tries to `cat` the file, the kernel has no idea what code to execute!
+
+### 2. The Solution: `struct device_attribute`
+For drivers, the kernel provides a specialized "Wrapper" that adds the missing logic:
+```c
+struct device_attribute {
+    struct attribute attr; /* The base structure (Name & Permissions) */
+    
+    /* The "Read" function: Executed when user runs 'cat /sys/.../max_size' */
+    ssize_t (*show)(struct device *dev, struct device_attribute *attr, char *buf);
+    
+    /* The "Write" function: Executed when user runs 'echo 1024 > /sys/.../max_size' */
+    ssize_t (*store)(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+};
+```
+
+### 3. The Magic Macro: `DEVICE_ATTR`
+Kernel developers hate boilerplate code. Instead of manually initializing every pointer, they use macros that automatically link the structure to specific functions.
+
+*   **For `max_size` (Read/Write):**
+    ```c
+    /* This automatically expects functions named max_size_show and max_size_store */
+    static DEVICE_ATTR_RW(max_size); 
+    ```
+*   **For `serial_num` (Read Only):**
+    ```c
+    /* This automatically expects a function named serial_num_show */
+    static DEVICE_ATTR_RO(serial_num); 
+    ```
+
+### 4. `sysfs` File Permissions (The `mode`)
+Sysfs files follow the same permission rules as regular Linux files (Read/Write/Execute for Owner/Group/World). The kernel provides macros to set these safely:
+
+*   **`0444` (or `S_IRUGO`):** World-Readable. Anyone can see the serial number.
+*   **`0644` (or `S_IWUSR | S_IRUGO`):** Owner-Writable, World-Readable. Anyone can see the max size, but only the **Root user** (the owner of the sysfs file) can change it.
+*   **`0664`:** Owner and Group can write; others can only read.
+
+### 5. Summary of the Flow
+1.  **Define the functions:** Write your `show` and `store` C functions.
+2.  **Declare the Attribute:** Use `DEVICE_ATTR_RW` or `DEVICE_ATTR_RO`.
+3.  **Register the Attribute:** Use `device_create_file()` or `sysfs_create_group()` inside your `probe()` function to actually draw the file in `/sys`.
+
+---
+
+## 16. Key Takeaways
 
 1.  **Nodes** represent devices; **Properties** (like `compatible`, `reg`, `status`) describe them.
 2.  **The Specification** (Chapter 3) is the "Bible" that tells you which properties are allowed.
@@ -798,3 +854,6 @@ In our platform driver code, we used `device_create()`. Under the hood, this one
 8.  **kobject:** The base unit of the LDM that handles **Reference Counting** and **sysfs folders**.
 9.  **kset:** Groups kobjects into directories (like `/sys/class`).
 10. **ktype:** Defines the behavior and attributes of a group of kobjects.
+11. **Attributes:** The individual files inside `/sys`. Created using `struct device_attribute`.
+12. **show/store:** The C functions that run when a user reads (`cat`) or writes (`echo`) to a `sysfs` file.
+13. **Permissions:** Use standard Linux octal modes (like `0444` or `0644`) to control who can modify your driver settings.

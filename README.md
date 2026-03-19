@@ -634,7 +634,56 @@ To ensure older versions adapt to newer updates, kernel developers follow these 
 
 ---
 
-## 12. Key Takeaways
+## 12. Device Tree Overlays (.dtbo): The Transparent Patch
+
+In the BeagleBone world, add-on boards are called **"Capes."** In the Raspberry Pi world, they are called **"HATs"** (Hardware Attached on Top). Regardless of the name, the software mechanism to make them work is exactly the same: **Device Tree Overlays (.dtbo)**.
+
+### The Problem with Editing the Main DTB
+Imagine you wire up a motor controller to your Pi's I2C pins. If you directly edit the main `bcm2712-rpi-5-b.dtb` file to add the motor nodes, your Pi is now permanently hardcoded to expect those motors.
+*   **The Conflict:** If you disconnect the motors tomorrow to work on a fan, the kernel will throw errors looking for hardware that isn't there.
+*   **The Pain:** You would have to recompile the entire main Device Tree every time you change a single wire.
+
+### The Solution: The "Transparent Patch"
+An overlay is like a transparent sheet of plastic you lay over a blueprint.
+1.  **The Base DTB** describes the naked Raspberry Pi.
+2.  **Your Overlay (.dtbo)** describes only your specific add-on (like an RTC clock or an LCD screen).
+3.  **The Bootloader (U-Boot/RPi Firmware)** stacks them together in RAM right before Linux boots.
+
+If you unplug the hardware, you just tell the bootloader to stop loading that specific `.dtbo` file. The base system remains completely untouched and pristine.
+
+### The Overlay Syntax Breakdown
+Writing an overlay requires a specific syntax using **Fragments**.
+
+**Example: Real-Time Clock (RTC) Overlay**
+```dts
+/* Fragment 0: We are making our first patch */
+fragment@0 {
+    
+    /* The Target: WHERE are we patching? 
+       We use the label to point to the existing I2C bus */
+    target = <&i2c0>;
+
+    /* The Overlay: WHAT are we changing? */
+    __overlay__ {
+        /* 1. We change an existing property of the parent */
+        status = "okay"; 
+
+        /* 2. We add a brand new child node to the parent */
+        rtc: rtc@68 {
+            compatible = "dallas,ds1307";
+            reg = <0x68>;
+        };
+    };
+};
+```
+
+### The Rules of the `__overlay__` Node
+This is the most critical rule: **The Linux kernel completely ignores anything outside of the `__overlay__` brackets.** 
+If you try to declare a variable or a property right after `fragment@0 {` but before `__overlay__ {`, it will not be injected into the main Device Tree. The `__overlay__` tag is the strict boundary of your patch.
+
+---
+
+## 13. Key Takeaways
 
 1.  **Nodes** represent devices; **Properties** (like `compatible`, `reg`, `status`) describe them.
 2.  **The Specification** (Chapter 3) is the "Bible" that tells you which properties are allowed.

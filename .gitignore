@@ -13,3 +13,4 @@
 /vmlinux.o
 /modules.order
 /Module.symvers
+linux-6.19*
